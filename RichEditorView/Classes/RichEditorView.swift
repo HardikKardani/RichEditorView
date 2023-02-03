@@ -6,7 +6,7 @@
 //
 
 import UIKit
-
+import WebKit
 /// RichEditorDelegate defines callbacks for the delegate of the RichEditorView
 @objc public protocol RichEditorDelegate: class {
 
@@ -37,7 +37,7 @@ import UIKit
 }
 
 /// RichEditorView is a UIView that displays richly styled text, and allows it to be edited in a WYSIWYG fashion.
-@objcMembers open class RichEditorView: UIView, UIScrollViewDelegate, UIWebViewDelegate, UIGestureRecognizerDelegate {
+@objcMembers open class RichEditorView: UIView, UIScrollViewDelegate, UIWebViewDelegate, UIGestureRecognizerDelegate, WKNavigationDelegate {
 
     // MARK: Public Properties
 
@@ -52,7 +52,7 @@ import UIKit
     }
 
     /// The internal UIWebView that is used to display the text.
-    open private(set) var webView: UIWebView
+    open private(set) var webView: WKWebView
 
     /// Whether or not scroll is enabled on the view.
     open var isScrollEnabled: Bool = true {
@@ -123,13 +123,13 @@ import UIKit
     // MARK: Initialization
     
     public override init(frame: CGRect) {
-        webView = UIWebView()
+        webView = WKWebView()
         super.init(frame: frame)
         setup()
     }
 
     required public init?(coder aDecoder: NSCoder) {
-        webView = UIWebView()
+        webView = WKWebView()
         super.init(coder: aDecoder)
         setup()
     }
@@ -138,11 +138,11 @@ import UIKit
         backgroundColor = .red
         
         webView.frame = bounds
-        webView.delegate = self
-        webView.keyboardDisplayRequiresUserAction = false
-        webView.scalesPageToFit = false
+        webView.navigationDelegate = self
+//        webView.keyboardDisplayRequiresUserAction = false
+//        webView.scalesPageToFit = false
         webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        webView.dataDetectorTypes = UIDataDetectorTypes()
+//        webView.dataDetectorTypes = UIDataDetectorTypes()
         webView.backgroundColor = .white
         
         webView.scrollView.isScrollEnabled = isScrollEnabled
@@ -157,7 +157,7 @@ import UIKit
         if let filePath = Bundle(for: RichEditorView.self).path(forResource: "rich_editor", ofType: "html") {
             let url = URL(fileURLWithPath: filePath, isDirectory: false)
             let request = URLRequest(url: url)
-            webView.loadRequest(request)
+            webView.load(request)
         }
 
         tapRecognizer.addTarget(self, action: #selector(viewWasTapped))
@@ -348,7 +348,7 @@ import UIKit
     /// - returns: The result of the JavaScript that was run
     @discardableResult
     public func runJS(_ js: String) -> String {
-        let string = webView.stringByEvaluatingJavaScript(from: js) ?? ""
+        let string = ""
         return string
     }
 
@@ -368,7 +368,7 @@ import UIKit
 
     // MARK: UIWebViewDelegate
 
-    public func webView(_ webView: UIWebView, shouldStartLoadWith request: URLRequest, navigationType: UIWebViewNavigationType) -> Bool {
+    public func webView(_ webView: WKWebView, shouldStartLoadWith request: URLRequest, navigationType: UIWebView.NavigationType) -> Bool {
 
         // Handle pre-defined editor actions
         let callbackPrefix = "re-callback://"
@@ -554,4 +554,25 @@ import UIKit
         return true
     }
 
+}
+
+extension WKWebView {
+    func evaluate(script: String, completion: @escaping (Any?, Error?) -> Void) {
+        var finished = false
+
+        evaluateJavaScript(script, completionHandler: { (result, error) in
+            if error == nil {
+                if result != nil {
+                    completion(result, nil)
+                }
+            } else {
+                completion(nil, error)
+            }
+            finished = true
+        })
+
+        while !finished {
+            RunLoop.current.run(mode: RunLoop.Mode(rawValue: "NSDefaultRunLoopMode"), before: NSDate.distantFuture)
+        }
+    }
 }
